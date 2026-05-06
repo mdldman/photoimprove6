@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Upscale — 4× Print Enhancer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&display=swap');
+
+:root {
+  --bg:      #f7f6f3;
+  --surface: #ffffff;
+  --border:  #e4e2dd;
+  --ink:     #1a1916;
+  --ink2:    #7a7872;
+  --ink3:    #b5b2ac;
+  --lime:    #b8f04a;
+  --lime-dk: #8ec827;
+  --red:     #ff4f4f;
+  --mono:    'DM Mono', ui-monospace, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', ui-sans-serif, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 4rem;
+}
+
+header {
+  width: 100%; max-width: 560px;
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 2.5rem;
+}
+.logo {
+  font-family: 'Fraunces', serif;
+  font-size: 1.5rem; font-weight: 300;
+  letter-spacing: -0.03em;
+}
+.logo em { font-style: italic; color: var(--lime-dk); }
+.version { font-family: var(--mono); font-size: 0.62rem; color: var(--ink3); }
+
+.card {
+  width: 100%; max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 0 var(--border), 0 8px 32px rgba(0,0,0,0.04);
+}
+
+/* DROP ZONE */
+.drop-zone {
+  position: relative;
+  padding: 3rem 2rem;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.18s;
+  min-height: 200px;
+}
+.drop-zone:hover { background: #f2f1ee; }
+.drop-zone.over  { background: #eefad6; }
+.drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.drop-icon {
+  width: 52px; height: 52px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.2s;
+}
+.drop-zone:hover .drop-icon { transform: translateY(-2px); }
+.drop-icon svg { width: 22px; height: 22px; stroke: var(--ink2); fill: none; stroke-width: 1.6; }
+.drop-label { font-size: 0.9rem; font-weight: 500; text-align: center; line-height: 1.4; }
+.drop-sub   { font-family: var(--mono); font-size: 0.65rem; color: var(--ink3); }
+
+/* BANNER */
+.banner {
+  display: none;
+  margin: 0.75rem 1rem 0;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  font-family: var(--mono); font-size: 0.68rem; line-height: 1.5;
+  background: #fff8ed; border: 1px solid #f0c070; color: #7a5000;
+}
+.banner.show     { display: block; }
+.banner.show.err { background: #fff0f0; border-color: var(--red); color: #900; }
+
+/* META */
+.img-meta { display: none; padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); }
+.img-meta.show { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.meta-item { display: flex; flex-direction: column; gap: 1px; }
+.meta-label { font-family: var(--mono); font-size: 0.55rem; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.1em; }
+.meta-val   { font-family: var(--mono); font-size: 0.75rem; font-weight: 500; }
+
+/* PREVIEW */
+.preview-section { display: none; border-bottom: 1px solid var(--border); }
+.preview-section.show { display: block; }
+.preview-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.tab-btn {
+  flex: 1; padding: 0.65rem;
+  font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em;
+  color: var(--ink3); background: transparent; border: none; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s;
+}
+.tab-btn.active { color: var(--ink); border-bottom-color: var(--ink); }
+.tab-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.preview-canvas {
+  position: relative; min-height: 240px; max-height: 400px;
+  background: repeating-conic-gradient(#ececea 0% 25%, #f7f6f3 0% 50%) 0 0 / 20px 20px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.preview-canvas img { max-width: 100%; max-height: 400px; object-fit: contain; display: block; }
+.panel-tag {
+  position: absolute; top: 10px; left: 10px;
+  font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.08em;
+  background: rgba(255,255,255,0.85); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 7px; color: var(--ink2);
+}
+
+/* PROGRESS */
+.progress-wrap { display: none; padding: 1rem; border-bottom: 1px solid var(--border); }
+.progress-wrap.show { display: block; }
+.progress-top { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
+.progress-status { font-family: var(--mono); font-size: 0.68rem; color: var(--ink2); }
+.progress-pct    { font-family: var(--mono); font-size: 0.68rem; font-weight: 500; }
+.progress-track  { height: 6px; background: var(--bg); border-radius: 99px; overflow: hidden; border: 1px solid var(--border); }
+.progress-fill   { height: 100%; width: 0%; background: linear-gradient(90deg, var(--lime-dk), var(--lime)); border-radius: 99px; transition: width 0.3s ease; }
+
+/* ACTIONS */
+.actions { padding: 1rem; display: flex; gap: 0.6rem; align-items: center; }
+.btn {
+  font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.82rem;
+  padding: 0.65rem 1.4rem; border-radius: 10px; border: 1px solid transparent;
+  cursor: pointer; transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap;
+}
+.btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-primary { background: var(--ink); color: #fff; flex: 1; justify-content: center; }
+.btn-primary:hover:not(:disabled) { background: #2d2b27; }
+.btn-lime { background: var(--lime); color: var(--ink); border-color: var(--lime-dk); }
+.btn-lime:hover:not(:disabled) { background: var(--lime-dk); color: #fff; }
+
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--ink3); flex-shrink: 0; transition: background 0.3s;
+}
+.status-dot.busy { background: var(--lime-dk); animation: pulse 1s ease-in-out infinite; }
+.status-dot.done { background: #22c55e; }
+.status-dot.err  { background: var(--red); }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+
+footer {
+  margin-top: 2rem;
+  font-family: var(--mono); font-size: 0.62rem; color: var(--ink3);
+  text-align: center; line-height: 1.8;
+}
+
+@media(max-width:480px){
+  body{padding:1.25rem .75rem 3rem}
+  .drop-zone{padding:2rem 1.25rem}
+  .actions{flex-wrap:wrap}
+  .btn-primary{flex:1 1 100%}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Up<em>scale</em></div>
+  <span class="version">4× · 300 DPI · No AI needed</span>
+</header>
+
+<div class="card">
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp"/>
+    <div class="drop-icon">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <div class="drop-label">Drop an image here<br>or click to browse</div>
+    <div class="drop-sub">PNG · JPG · WEBP &nbsp;·&nbsp; max 1500 × 1500 px</div>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="img-meta" id="imgMeta">
+    <div class="meta-item"><div class="meta-label">Input</div><div class="meta-val" id="metaDims">—</div></div>
+    <div class="meta-item"><div class="meta-label">Output</div><div class="meta-val" id="metaOut">—</div></div>
+    <div class="meta-item"><div class="meta-label">Size</div><div class="meta-val" id="metaSize">—</div></div>
+    <div class="meta-item"><div class="meta-label">Export</div><div class="meta-val">PNG 300 DPI</div></div>
+  </div>
+
+  <div class="preview-section" id="previewSection">
+    <div class="preview-tabs">
+      <button class="tab-btn active" id="tabBefore" onclick="showTab('before')">ORIGINAL</button>
+      <button class="tab-btn" id="tabAfter" onclick="showTab('after')" disabled>4× OUTPUT</button>
+    </div>
+    <div class="preview-canvas">
+      <img id="previewImg" src="" alt="Preview"/>
+      <div class="panel-tag" id="panelTag">ORIGINAL</div>
+    </div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-top">
+      <span class="progress-status" id="progressStatus">Working…</span>
+      <span class="progress-pct" id="progressPct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+
+  <div class="actions">
+    <div class="status-dot" id="statusDot"></div>
+    <button class="btn btn-primary" id="btnUpscale" disabled onclick="startUpscale()">
+      <svg viewBox="0 0 24 24"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+      Upscale 4×
+    </button>
+    <button class="btn btn-lime" id="btnDownload" disabled onclick="downloadResult()">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Save PNG
+    </button>
+  </div>
+
+</div>
+
+<footer>
+  Runs entirely in your browser · No uploads · No AI servers needed<br>
+  4× bicubic upscale + unsharp mask sharpening · 300 DPI PNG export
+</footer>
+
+<script>
+/* ══════════════════════════════
+   STATE
+══════════════════════════════ */
+const MAX_PX   = 1500;
+const DPI_PPM  = Math.round(300 * 1000 / 25.4); // 11811 px/m
+
+let currentFile   = null;
+let origObjectURL = null;
+let outputBlob    = null;
+let outputURL     = null;
+
+/* ══════════════════════════════
+   DOM
+══════════════════════════════ */
+const dropZone       = document.getElementById('dropZone');
+const fileInput      = document.getElementById('fileInput');
+const banner         = document.getElementById('banner');
+const imgMeta        = document.getElementById('imgMeta');
+const metaDims       = document.getElementById('metaDims');
+const metaOut        = document.getElementById('metaOut');
+const metaSize       = document.getElementById('metaSize');
+const previewSection = document.getElementById('previewSection');
+const previewImg     = document.getElementById('previewImg');
+const panelTag       = document.getElementById('panelTag');
+const tabBefore      = document.getElementById('tabBefore');
+const tabAfter       = document.getElementById('tabAfter');
+const progressWrap   = document.getElementById('progressWrap');
+const progressFill   = document.getElementById('progressFill');
+const progressStatus = document.getElementById('progressStatus');
+const progressPct    = document.getElementById('progressPct');
+const btnUpscale     = document.getElementById('btnUpscale');
+const btnDownload    = document.getElementById('btnDownload');
+const statusDot      = document.getElementById('statusDot');
+
+/* ══════════════════════════════
+   DROP / INPUT
+══════════════════════════════ */
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('over');
+  const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'));
+  if (f) loadFile(f);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) loadFile(fileInput.files[0]);
+  fileInput.value = '';
+});
+
+/* ══════════════════════════════
+   LOAD FILE
+══════════════════════════════ */
+function fmtBytes(b) {
+  return b < 1048576 ? (b/1024).toFixed(0)+' KB' : (b/1048576).toFixed(1)+' MB';
+}
+
+function loadFile(file) {
+  outputBlob = null; outputURL = null;
+  btnDownload.disabled = true;
+  btnUpscale.disabled  = true;
+  tabAfter.disabled    = true;
+  tabAfter.classList.remove('active');
+  tabBefore.classList.add('active');
+  hideBanner();
+  progressWrap.classList.remove('show');
+  setDot('');
+
+  currentFile = file;
+  if (origObjectURL) URL.revokeObjectURL(origObjectURL);
+  origObjectURL = URL.createObjectURL(file);
+
+  const img = new Image();
+  img.onload = () => {
+    const w = img.naturalWidth, h = img.naturalHeight;
+
+    if (w > MAX_PX || h > MAX_PX) {
+      showBanner(`⚠ Image is ${w}×${h} — too large (max ${MAX_PX}×${MAX_PX}). Please resize it first.`, true);
+    } else {
+      btnUpscale.disabled = false;
+      if (w >= 1000 || h >= 1000) {
+        showBanner(`ℹ Already ${w}×${h} — output will be ${w*4}×${h*4}. May take 20–40 seconds.`, false);
+      }
+    }
+
+    metaDims.textContent = `${w} × ${h}`;
+    metaOut.textContent  = `${w*4} × ${h*4}`;
+    metaSize.textContent = fmtBytes(file.size);
+    imgMeta.classList.add('show');
+
+    previewImg.src = origObjectURL;
+    panelTag.textContent = 'ORIGINAL';
+    previewSection.classList.add('show');
+  };
+  img.src = origObjectURL;
+}
+
+/* ══════════════════════════════
+   BANNER
+══════════════════════════════ */
+function showBanner(msg, isErr) {
+  banner.textContent = msg;
+  banner.className   = 'banner show' + (isErr ? ' err' : '');
+}
+function hideBanner() {
+  banner.className   = 'banner';
+  banner.textContent = '';
+}
+
+/* ══════════════════════════════
+   TABS
+══════════════════════════════ */
+function showTab(tab) {
+  if (tab === 'before') {
+    tabBefore.classList.add('active'); tabAfter.classList.remove('active');
+    previewImg.src = origObjectURL; panelTag.textContent = 'ORIGINAL';
+  } else {
+    if (!outputURL) return;
+    tabAfter.classList.add('active'); tabBefore.classList.remove('active');
+    previewImg.src = outputURL; panelTag.textContent = '4× OUTPUT';
+  }
+}
+
+/* ══════════════════════════════
+   STATUS DOT + PROGRESS
+══════════════════════════════ */
+function setDot(s) { statusDot.className = 'status-dot' + (s ? ' '+s : ''); }
+function setProgress(pct, label) {
+  progressFill.style.width = pct + '%';
+  progressPct.textContent  = Math.round(pct) + '%';
+  if (label) progressStatus.textContent = label;
+}
+
+/* ══════════════════════════════
+   UPSCALE
+   Uses Canvas 2D API — zero
+   external dependencies, works
+   on every browser including
+   Chromebook. Steps:
+   1. Draw original at 4× with
+      high-quality smoothing
+   2. Apply unsharp mask to
+      recover edge crispness
+   3. Inject 300 DPI pHYs chunk
+══════════════════════════════ */
+async function startUpscale() {
+  if (!currentFile) return;
+  btnUpscale.disabled = true; btnDownload.disabled = true;
+  outputBlob = null; outputURL = null; tabAfter.disabled = true;
+  hideBanner();
+  progressWrap.classList.add('show');
+  setProgress(5, 'Loading image…');
+  setDot('busy');
+
+  // Yield to browser so UI updates before heavy work
+  await sleep(30);
+
+  try {
+    const img = await loadImg(origObjectURL);
+    const W = img.naturalWidth * 4;
+    const H = img.naturalHeight * 4;
+
+    setProgress(15, 'Upscaling 4×…');
+    await sleep(30);
+
+    // Step 1: 4× bicubic upscale via canvas imageSmoothingQuality
+    const c1 = makeCanvas(W, H);
+    const x1 = c1.getContext('2d');
+    x1.imageSmoothingEnabled = true;
+    x1.imageSmoothingQuality = 'high';
+    x1.drawImage(img, 0, 0, W, H);
+
+    setProgress(50, 'Sharpening…');
+    await sleep(30);
+
+    // Step 2: Unsharp mask — sharpen without halos
+    // Get pixel data, apply luminance-based sharpening convolution
+    const src = x1.getImageData(0, 0, W, H);
+    const dst = x1.createImageData(W, H);
+    sharpen(src, dst, W, H, 0.45); // strength 0–1
+
+    setProgress(80, 'Finalising…');
+    await sleep(30);
+
+    // Write sharpened data back
+    x1.putImageData(dst, 0, 0);
+
+    setProgress(90, 'Embedding 300 DPI…');
+    await sleep(30);
+
+    // Step 3: Export as PNG and inject DPI
+    const b64 = c1.toDataURL('image/png');
+    outputBlob = injectPngDpi(b64, DPI_PPM);
+    outputURL  = URL.createObjectURL(outputBlob);
+
+    setProgress(100, 'Done ✓');
+    setDot('done');
+    tabAfter.disabled = false;
+    showTab('after');
+    btnDownload.disabled = false;
+
+  } catch (err) {
+    console.error(err);
+    setProgress(0, 'Failed');
+    setDot('err');
+    showBanner('⚠ Error: ' + (err.message || String(err)).substring(0, 100), true);
+  }
+
+  btnUpscale.disabled = false;
+}
+
+/* ══════════════════════════════
+   HELPERS
+══════════════════════════════ */
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function loadImg(url) {
+  return new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i); i.onerror = rej; i.src = url;
+  });
+}
+
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h; return c;
+}
+
+/* Unsharp mask — convolve with gaussian blur, subtract from original */
+function sharpen(src, dst, w, h, strength) {
+  const s = src.data, d = dst.data;
+  const len = w * h * 4;
+
+  // Lightweight 3×3 box blur approximation of gaussian
+  const blur = new Uint8ClampedArray(len);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        blur[i+c] = (
+          s[i-w*4-4+c] + s[i-w*4+c] + s[i-w*4+4+c] +
+          s[i-4+c]     + s[i+c]     + s[i+4+c] +
+          s[i+w*4-4+c] + s[i+w*4+c] + s[i+w*4+4+c]
+        ) / 9;
+      }
+      blur[i+3] = s[i+3];
+    }
+  }
+
+  // Unsharp = original + strength * (original - blur)
+  for (let i = 0; i < len; i += 4) {
+    d[i]   = clamp(s[i]   + strength * (s[i]   - blur[i]));
+    d[i+1] = clamp(s[i+1] + strength * (s[i+1] - blur[i+1]));
+    d[i+2] = clamp(s[i+2] + strength * (s[i+2] - blur[i+2]));
+    d[i+3] = s[i+3];
+  }
+}
+
+function clamp(v) { return v < 0 ? 0 : v > 255 ? 255 : v | 0; }
+
+/* ══════════════════════════════
+   DOWNLOAD
+══════════════════════════════ */
+function downloadResult() {
+  if (!outputBlob || !currentFile) return;
+  const base = currentFile.name.replace(/\.[^.]+$/, '');
+  const url  = URL.createObjectURL(outputBlob);
+  Object.assign(document.createElement('a'), {
+    href: url, download: base + '_4x_300DPI.png'
+  }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/* ══════════════════════════════
+   PNG pHYs 300 DPI INJECTION
+══════════════════════════════ */
+function crc32(buf, s, l) {
+  let c = 0xFFFFFFFF;
+  const T = crc32._t || (crc32._t = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let v = n;
+      for (let k = 0; k < 8; k++) v = (v&1) ? (0xEDB88320^(v>>>1)) : (v>>>1);
+      t[n] = v;
+    }
+    return t;
+  })());
+  for (let i = s; i < s+l; i++) c = T[(c^buf[i])&0xFF] ^ (c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+function u32be(v) { return [(v>>>24)&0xFF,(v>>>16)&0xFF,(v>>>8)&0xFF,v&0xFF]; }
+
+function injectPngDpi(b64, ppm) {
+  const raw = atob(b64.split(',')[1]);
+  const src = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) src[i] = raw.charCodeAt(i);
+  const pB=[...u32be(ppm)], cD=[...pB,...pB,0x01], cT=[0x70,0x48,0x59,0x73];
+  const ci=new Uint8Array([...cT,...cD]), ck=u32be(crc32(ci,0,ci.length));
+  const ph=new Uint8Array([...u32be(9),...cT,...cD,...ck]);
+  let off=-1, i=8;
+  while(i<src.length-8){
+    const ln=(src[i]<<24|src[i+1]<<16|src[i+2]<<8|src[i+3])>>>0;
+    const tp=String.fromCharCode(src[i+4],src[i+5],src[i+6],src[i+7]);
+    if(tp==='IDAT'){off=i;break;}
+    if(tp==='pHYs'){
+      const dv=new DataView(src.buffer);
+      dv.setUint32(i+8,ppm,false);dv.setUint32(i+12,ppm,false);src[i+16]=0x01;
+      dv.setUint32(i+17,crc32(src,i+4,13),false);
+      return new Blob([src],{type:'image/png'});
+    }
+    i+=4+4+ln+4;
+  }
+  if(off<0) return new Blob([src],{type:'image/png'});
+  const out=new Uint8Array(src.length+ph.length);
+  out.set(src.subarray(0,off),0);out.set(ph,off);out.set(src.subarray(off),off+ph.length);
+  return new Blob([out],{type:'image/png'});
+}
+</script>
+</body>
+</html>
